@@ -468,9 +468,6 @@ func isStaticCompositeLiteral(n *Node) bool {
 			if r.Op != OSTRUCTKEY {
 				Fatalf("isStaticCompositeLiteral: rhs not OSTRUCTKEY: %v", r)
 			}
-			if r.Op != OUNIONKEY {
-				Fatalf("isStaticCompositeLiteral: rhs not OUNIONKEY: %v", r)
-			}
 			if !isStaticCompositeLiteral(r.Left) {
 				return false
 			}
@@ -478,6 +475,9 @@ func isStaticCompositeLiteral(n *Node) bool {
 		return true
 	case OUNIONLIT:
 		for _, r := range n.List.Slice() {
+			if r.Op != OUNIONKEY {
+				Fatalf("isStaticCompositeLiteral: rhs not OUNIONKEY: %v", r)
+			}
 			if !isStaticCompositeLiteral(r.Left) {
 				return false
 			}
@@ -543,9 +543,6 @@ func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes)
 			if r.Op != OSTRUCTKEY {
 				Fatalf("fixedlit: rhs not OSTRUCTKEY: %v", r)
 			}
-			if r.Op != OUNIONKEY {
-				Fatalf("fixedlit: rhs not OUNIONKEY: %v", r)
-			}
 			if r.Sym.IsBlank() {
 				return nblank, r.Left
 			}
@@ -554,6 +551,9 @@ func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes)
 		}
 	case OUNIONLIT:
 		splitnode = func(r *Node) (*Node, *Node) {
+			if r.Op != OUNIONKEY {
+				Fatalf("fixedlit: rhs not OUNIONKEY: %v", r)
+			}
 			if r.Sym.IsBlank() {
 				return nblank, r.Left
 			}
