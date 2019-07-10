@@ -863,7 +863,7 @@ func (p *parser) operand(keep_parens bool) Expr {
 		}
 		return t
 
-	case _Lbrack, _Chan, _Map, _Struct, _Interface:
+	case _Lbrack, _Chan, _Map, _Struct, _Union, _Interface:
 		return p.type_() // othertype
 
 	default:
@@ -1184,6 +1184,9 @@ func (p *parser) typeOrNil() Expr {
 	case _Struct:
 		return p.structType()
 
+	case _Union:
+		return p.unionType()
+
 	case _Interface:
 		return p.interfaceType()
 
@@ -1255,7 +1258,25 @@ func (p *parser) structType() *StructType {
 
 	p.want(_Struct)
 	p.list(_Lbrace, _Semi, _Rbrace, func() bool {
-		p.fieldDecl(typ)
+		p.structFieldDecl(typ)
+		return false
+	})
+
+	return typ
+}
+
+// UnionType = "union" "{" { FieldDecl ";" } "}" .
+func (p *parser) unionType() *UnionType {
+	if trace {
+		defer p.trace("unionType")()
+	}
+
+	typ := new(UnionType)
+	typ.pos = p.pos()
+
+	p.want(_Union)
+	p.list(_Lbrace, _Semi, _Rbrace, func() bool {
+		p.unionFieldDecl(typ)
 		return false
 	})
 
@@ -1303,7 +1324,7 @@ func (p *parser) funcResult() []*Field {
 	return nil
 }
 
-func (p *parser) addField(styp *StructType, pos Pos, name *Name, typ Expr, tag *BasicLit) {
+func (p *parser) structAddField(styp *StructType, pos Pos, name *Name, typ Expr, tag *BasicLit) {
 	if tag != nil {
 		for i := len(styp.FieldList) - len(styp.TagList); i > 0; i-- {
 			styp.TagList = append(styp.TagList, nil)
@@ -1325,9 +1346,9 @@ func (p *parser) addField(styp *StructType, pos Pos, name *Name, typ Expr, tag *
 // FieldDecl      = (IdentifierList Type | AnonymousField) [ Tag ] .
 // AnonymousField = [ "*" ] TypeName .
 // Tag            = string_lit .
-func (p *parser) fieldDecl(styp *StructType) {
+func (p *parser) structFieldDecl(styp *StructType) {
 	if trace {
-		defer p.trace("fieldDecl")()
+		defer p.trace("structFieldDecl")()
 	}
 
 	pos := p.pos()
@@ -1338,7 +1359,7 @@ func (p *parser) fieldDecl(styp *StructType) {
 			// embed oliteral
 			typ := p.qualifiedName(name)
 			tag := p.oliteral()
-			p.addField(styp, pos, nil, typ, tag)
+			p.structAddField(styp, pos, nil, typ, tag)
 			return
 		}
 
@@ -1348,7 +1369,7 @@ func (p *parser) fieldDecl(styp *StructType) {
 		tag := p.oliteral()
 
 		for _, name := range names {
-			p.addField(styp, name.Pos(), name, typ, tag)
+			p.structAddField(styp, name.Pos(), name, typ, tag)
 		}
 
 	case _Lparen:
@@ -1360,7 +1381,7 @@ func (p *parser) fieldDecl(styp *StructType) {
 			typ := newIndirect(pos, p.qualifiedName(nil))
 			p.want(_Rparen)
 			tag := p.oliteral()
-			p.addField(styp, pos, nil, typ, tag)
+			p.structAddField(styp, pos, nil, typ, tag)
 			p.syntaxError("cannot parenthesize embedded type")
 
 		} else {
@@ -1368,7 +1389,7 @@ func (p *parser) fieldDecl(styp *StructType) {
 			typ := p.qualifiedName(nil)
 			p.want(_Rparen)
 			tag := p.oliteral()
-			p.addField(styp, pos, nil, typ, tag)
+			p.structAddField(styp, pos, nil, typ, tag)
 			p.syntaxError("cannot parenthesize embedded type")
 		}
 
@@ -1379,14 +1400,106 @@ func (p *parser) fieldDecl(styp *StructType) {
 			typ := newIndirect(pos, p.qualifiedName(nil))
 			p.want(_Rparen)
 			tag := p.oliteral()
-			p.addField(styp, pos, nil, typ, tag)
+			p.structAddField(styp, pos, nil, typ, tag)
 			p.syntaxError("cannot parenthesize embedded type")
 
 		} else {
 			// '*' embed oliteral
 			typ := newIndirect(pos, p.qualifiedName(nil))
 			tag := p.oliteral()
-			p.addField(styp, pos, nil, typ, tag)
+			p.structAddField(styp, pos, nil, typ, tag)
+		}
+
+	default:
+		p.syntaxError("expecting field name or embedded type")
+		p.advance(_Semi, _Rbrace)
+	}
+}
+
+func (p *parser) unionAddField(utyp *UnionType, pos Pos, name *Name, typ Expr, tag *BasicLit) {
+	if tag != nil {
+		for i := len(utyp.FieldList) - len(utyp.TagList); i > 0; i-- {
+			utyp.TagList = append(utyp.TagList, nil)
+		}
+		utyp.TagList = append(utyp.TagList, tag)
+	}
+
+	f := new(Field)
+	f.pos = pos
+	f.Name = name
+	f.Type = typ
+	utyp.FieldList = append(utyp.FieldList, f)
+
+	if debug && tag != nil && len(utyp.FieldList) != len(utyp.TagList) {
+		panic("inconsistent struct field list")
+	}
+}
+
+// FieldDecl      = (IdentifierList Type | AnonymousField) [ Tag ] .
+// AnonymousField = [ "*" ] TypeName .
+// Tag            = string_lit .
+func (p *parser) unionFieldDecl(utyp *UnionType) {
+	if trace {
+		defer p.trace("unionFieldDecl")()
+	}
+
+	pos := p.pos()
+	switch p.tok {
+	case _Name:
+		name := p.name()
+		if p.tok == _Dot || p.tok == _Literal || p.tok == _Semi || p.tok == _Rbrace {
+			// embed oliteral
+			typ := p.qualifiedName(name)
+			tag := p.oliteral()
+			p.unionAddField(utyp, pos, nil, typ, tag)
+			return
+		}
+
+		// new_name_list ntype oliteral
+		names := p.nameList(name)
+		typ := p.type_()
+		tag := p.oliteral()
+
+		for _, name := range names {
+			p.unionAddField(utyp, name.Pos(), name, typ, tag)
+		}
+
+	case _Lparen:
+		p.next()
+		if p.tok == _Star {
+			// '(' '*' embed ')' oliteral
+			pos := p.pos()
+			p.next()
+			typ := newIndirect(pos, p.qualifiedName(nil))
+			p.want(_Rparen)
+			tag := p.oliteral()
+			p.unionAddField(utyp, pos, nil, typ, tag)
+			p.syntaxError("cannot parenthesize embedded type")
+
+		} else {
+			// '(' embed ')' oliteral
+			typ := p.qualifiedName(nil)
+			p.want(_Rparen)
+			tag := p.oliteral()
+			p.unionAddField(utyp, pos, nil, typ, tag)
+			p.syntaxError("cannot parenthesize embedded type")
+		}
+
+	case _Star:
+		p.next()
+		if p.got(_Lparen) {
+			// '*' '(' embed ')' oliteral
+			typ := newIndirect(pos, p.qualifiedName(nil))
+			p.want(_Rparen)
+			tag := p.oliteral()
+			p.unionAddField(utyp, pos, nil, typ, tag)
+			p.syntaxError("cannot parenthesize embedded type")
+
+		} else {
+			// '*' embed oliteral
+			typ := newIndirect(pos, p.qualifiedName(nil))
+			tag := p.oliteral()
+			p.unionAddField(utyp, pos, nil, typ, tag)
 		}
 
 	default:
@@ -1471,7 +1584,7 @@ func (p *parser) paramDeclOrNil() *Field {
 	case _Name:
 		f.Name = p.name()
 		switch p.tok {
-		case _Name, _Star, _Arrow, _Func, _Lbrack, _Chan, _Map, _Struct, _Interface, _Lparen:
+		case _Name, _Star, _Arrow, _Func, _Lbrack, _Chan, _Map, _Struct, _Union, _Interface, _Lparen:
 			// sym name_or_type
 			f.Type = p.type_()
 
@@ -1486,7 +1599,7 @@ func (p *parser) paramDeclOrNil() *Field {
 			f.Name = nil
 		}
 
-	case _Arrow, _Star, _Func, _Lbrack, _Chan, _Map, _Struct, _Interface, _Lparen:
+	case _Arrow, _Star, _Func, _Lbrack, _Chan, _Map, _Struct, _Union, _Interface, _Lparen:
 		// name_or_type
 		f.Type = p.type_()
 
@@ -2072,7 +2185,7 @@ func (p *parser) stmtOrNil() Stmt {
 		}
 
 	case _Literal, _Func, _Lparen, // operands
-		_Lbrack, _Struct, _Map, _Chan, _Interface, // composite types
+		_Lbrack, _Struct, _Union, _Map, _Chan, _Interface, // composite types
 		_Arrow: // receive operator
 		return p.simpleStmt(nil, 0)
 

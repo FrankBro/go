@@ -1447,7 +1447,7 @@ opswitch:
 		// stringtoslicerune(*[32]rune, string) []rune
 		n = mkcall("stringtoslicerune", n.Type, init, a, conv(n.Left, types.Types[TSTRING]))
 
-	case OARRAYLIT, OSLICELIT, OMAPLIT, OSTRUCTLIT, OPTRLIT:
+	case OARRAYLIT, OSLICELIT, OMAPLIT, OSTRUCTLIT, OUNIONLIT, OPTRLIT:
 		if isStaticCompositeLiteral(n) && !canSSAType(n.Type) {
 			// n can be directly represented in the read-only data section.
 			// Make direct reference to the static data. See issue 12841.
@@ -3775,6 +3775,7 @@ func candiscard(n *Node) bool {
 		OCOMPLIT,
 		OMAPLIT,
 		OSTRUCTLIT,
+		OUNIONLIT,
 		OARRAYLIT,
 		OSLICELIT,
 		OPTRLIT,
@@ -3790,6 +3791,7 @@ func candiscard(n *Node) bool {
 		OGE,
 		OKEY,
 		OSTRUCTKEY,
+		OUNIONKEY,
 		OLEN,
 		OMUL,
 		OLSH,

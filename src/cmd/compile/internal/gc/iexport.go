@@ -1193,6 +1193,12 @@ func (w *exportWriter) expr(n *Node) {
 		w.typ(n.Type)
 		w.elemList(n.List) // special handling of field names
 
+	case OUNIONLIT:
+		w.op(OUNIONLIT)
+		w.pos(n.Pos)
+		w.typ(n.Type)
+		w.elemList(n.List) // special handling of field names
+
 	case OARRAYLIT, OSLICELIT, OMAPLIT:
 		w.op(OCOMPLIT)
 		w.pos(n.Pos)

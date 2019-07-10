@@ -623,6 +623,7 @@ const (
 	OCOMPLIT   // Right{List} (composite literal, not yet lowered to specific form)
 	OMAPLIT    // Type{List} (composite literal, Type is map)
 	OSTRUCTLIT // Type{List} (composite literal, Type is struct)
+	OUNIONLIT  // Type{List} (composite literal, Type is union)
 	OARRAYLIT  // Type{List} (composite literal, Type is array)
 	OSLICELIT  // Type{List} (composite literal, Type is slice) Right.Int64() = slice length.
 	OPTRLIT    // &Left (left is composite literal)
@@ -634,7 +635,7 @@ const (
 
 	// Used during parsing but don't last.
 	ODCLFUNC  // func f() or func (r) f()
-	ODCLFIELD // struct field, interface field, or func/method argument/return value.
+	ODCLFIELD // struct field, union field, interface field, or func/method argument/return value.
 	ODCLCONST // const pi = 3.14
 	ODCLTYPE  // type Int int or type Int = int
 
@@ -657,6 +658,7 @@ const (
 	OINDEXMAP    // Left[Right] (index of map)
 	OKEY         // Left:Right (key:value in struct/array/map literal)
 	OSTRUCTKEY   // Sym:Left (key:value in struct literal, after type checking)
+	OUNIONKEY    // Sym:Left (key:value in union literal, after type checking)
 	OLEN         // len(Left)
 	OMAKE        // make(List) (before type checking converts to one of the following)
 	OMAKECHAN    // make(Type, Left) (type is chan)
@@ -734,6 +736,7 @@ const (
 	OTCHAN   // chan int
 	OTMAP    // map[string]int
 	OTSTRUCT // struct{}
+	OTUNION  // union{}
 	OTINTER  // interface{}
 	OTFUNC   // func()
 	OTARRAY  // []int, [8]int, [N]int or [...]int

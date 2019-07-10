@@ -837,6 +837,15 @@ func (r *importReader) node() *Node {
 		lineno = savedlineno
 		return n
 
+	case OUNIONLIT:
+		// TODO(mdempsky): Export position information for OUNIONKEY nodes.
+		savedlineno := lineno
+		lineno = r.pos()
+		n := nodl(lineno, OCOMPLIT, nil, typenod(r.typ()))
+		n.List.Set(r.elemList()) // special handling of field names
+		lineno = savedlineno
+		return n
+
 	// case OARRAYLIT, OSLICELIT, OMAPLIT:
 	// 	unreachable - mapped to case OCOMPLIT below by exporter
 

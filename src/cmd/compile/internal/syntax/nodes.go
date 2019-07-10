@@ -258,6 +258,13 @@ type (
 		expr
 	}
 
+	// union { FieldList[0] TagList[0]; FieldList[1] TagList[1]; ... }
+	UnionType struct {
+		FieldList []*Field
+		TagList   []*BasicLit // i >= len(TagList) || TagList[i] == nil means no tag for field i
+		expr
+	}
+
 	// Name Type
 	//      Type
 	Field struct {

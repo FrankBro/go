@@ -156,6 +156,84 @@ func widstruct(errtype *types.Type, t *types.Type, o int64, flag int) int64 {
 	return o
 }
 
+func widunion(errtype *types.Type, t *types.Type, o int64, flag int) int64 {
+	starto := o
+	maxalign := int32(flag)
+	if maxalign < 1 {
+		maxalign = 1
+	}
+	lastzero := int64(0)
+	for _, f := range t.Fields().Slice() {
+		if f.Type == nil {
+			// broken field, just skip it so that other valid fields
+			// get a width.
+			continue
+		}
+
+		dowidth(f.Type)
+		if int32(f.Type.Align) > maxalign {
+			maxalign = int32(f.Type.Align)
+		}
+		if f.Type.Align > 0 {
+			o = Rnd(o, int64(f.Type.Align))
+		}
+		f.Offset = o
+		if n := asNode(f.Nname); n != nil {
+			// addrescapes has similar code to update these offsets.
+			// Usually addrescapes runs after widunion,
+			// in which case we could drop this,
+			// but function closure functions are the exception.
+			// NOTE(rsc): This comment may be stale.
+			// It's possible the ordering has changed and this is
+			// now the common case. I'm not sure.
+			if n.Name.Param.Stackcopy != nil {
+				n.Name.Param.Stackcopy.Xoffset = o
+				n.Xoffset = 0
+			} else {
+				n.Xoffset = o
+			}
+		}
+
+		w := f.Type.Width
+		if w < 0 {
+			Fatalf("invalid width %d", f.Type.Width)
+		}
+		if w == 0 {
+			lastzero = o
+		}
+		o += w
+		maxwidth := thearch.MAXWIDTH
+		// On 32-bit systems, reflect tables impose an additional constraint
+		// that each field start offset must fit in 31 bits.
+		if maxwidth < 1<<32 {
+			maxwidth = 1<<31 - 1
+		}
+		if o >= maxwidth {
+			yyerror("type %L too large", errtype)
+			o = 8 // small but nonzero
+		}
+	}
+
+	// For nonzero-sized structs which end in a zero-sized thing, we add
+	// an extra byte of padding to the type. This padding ensures that
+	// taking the address of the zero-sized thing can't manufacture a
+	// pointer to the next object in the heap. See issue 9401.
+	if flag == 1 && o > starto && o == lastzero {
+		o++
+	}
+
+	// final width is rounded
+	if flag != 0 {
+		o = Rnd(o, int64(maxalign))
+	}
+	t.Align = uint8(maxalign)
+
+	// type width only includes back to first field's offset
+	t.Width = o - starto
+
+	return o
+}
+
 // dowidth calculates and stores the size and alignment for t.
 // If sizeCalculationDisabled is set, and the size/alignment
 // have not already been calculated, it calls Fatal.
@@ -347,6 +425,12 @@ func dowidth(t *types.Type) {
 			Fatalf("dowidth fn struct %v", t)
 		}
 		w = widstruct(t, t, 0, 1)
+
+	case TUNION:
+		if t.IsFuncArgStruct() {
+			Fatalf("dowidth fn union %v", t)
+		}
+		w = widunion(t, t, 0, 1)
 
 	// make fake type to check later to
 	// trigger function argument computation.

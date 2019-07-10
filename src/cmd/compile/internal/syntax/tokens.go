@@ -64,6 +64,7 @@ const (
 	_Struct      // struct
 	_Switch      // switch
 	_Type        // type
+	_Union       // union
 	_Var         // var
 
 	// empty line comment to exclude it from .String

@@ -920,6 +920,12 @@ opSwitch:
 			e.escassignWhyWhere(n, elt.Left, "struct literal element", n)
 		}
 
+		// Link values to union.
+	case OUNIONLIT:
+		for _, elt := range n.List.Slice() {
+			e.escassignWhyWhere(n, elt.Left, "union literal element", n)
+		}
+
 	case OPTRLIT:
 		e.track(n)
 
@@ -1079,6 +1085,7 @@ func (e *EscState) escassign(dst, src *Node, step *EscStep) {
 		OCONVNOP,
 		OMAPLIT,
 		OSTRUCTLIT,
+		OUNIONLIT,
 		OPTRLIT,
 		ODDDARG,
 		OCALLPART:
@@ -1131,6 +1138,7 @@ func (e *EscState) escassign(dst, src *Node, step *EscStep) {
 		OSLICELIT,
 		OMAPLIT,
 		OSTRUCTLIT,
+		OUNIONLIT,
 		OMAKECHAN,
 		OMAKEMAP,
 		OMAKESLICE,
@@ -1671,7 +1679,7 @@ func (e *EscState) esccall(call *Node, parent *Node) {
 			// arg.Esc == EscNone means that arg does not escape the current function.
 			// arg.SetNoescape(true) here means that arg does not escape this statement
 			// in the current function.
-			case OCALLPART, OCLOSURE, ODDDARG, OARRAYLIT, OSLICELIT, OPTRLIT, OSTRUCTLIT:
+			case OCALLPART, OCLOSURE, ODDDARG, OARRAYLIT, OSLICELIT, OPTRLIT, OSTRUCTLIT, OUNIONLIT:
 				a.SetNoescape(true)
 			}
 		}

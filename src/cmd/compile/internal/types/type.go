@@ -48,6 +48,7 @@ const (
 	TSLICE
 	TARRAY
 	TSTRUCT
+	TUNION
 	TCHAN
 	TMAP
 	TINTER
@@ -130,6 +131,7 @@ type Type struct {
 	// TFORW: *Forward
 	// TFUNC: *Func
 	// TSTRUCT: *Struct
+	// TUNION: *Union
 	// TINTER: *Interface
 	// TDDDFIELD: DDDField
 	// TFUNCARGS: FuncArgs
@@ -196,6 +198,8 @@ func (t *Type) Pkg() *Pkg {
 		return t.Extra.(*Func).pkg
 	case TSTRUCT:
 		return t.Extra.(*Struct).pkg
+	case TUNION:
+		return t.Extra.(*Union).pkg
 	case TINTER:
 		return t.Extra.(*Interface).pkg
 	default:
@@ -211,6 +215,8 @@ func (t *Type) SetPkg(pkg *Pkg) {
 		t.Extra.(*Func).pkg = pkg
 	case TSTRUCT:
 		t.Extra.(*Struct).pkg = pkg
+	case TUNION:
+		t.Extra.(*Union).pkg = pkg
 	case TINTER:
 		t.Extra.(*Interface).pkg = pkg
 	default:
@@ -281,6 +287,18 @@ type Struct struct {
 	Funarg Funarg // type of function arguments for arg struct
 }
 
+// UnionType contains Type fields specific to union types.
+type Union struct {
+	fields Fields
+	pkg    *Pkg
+
+	// Maps have three associated internal structs (see struct MapType).
+	// Map links such structs back to their map type.
+	Map *Type
+
+	Funarg Funarg // type of function arguments for arg struct
+}
+
 // Fnstruct records the kind of function argument
 type Funarg uint8
 
@@ -295,6 +313,12 @@ const (
 func (t *Type) StructType() *Struct {
 	t.wantEtype(TSTRUCT)
 	return t.Extra.(*Struct)
+}
+
+// UnionType returns t's extra union-specific fields.
+func (t *Type) UnionType() *Union {
+	t.wantEtype(TUNION)
+	return t.Extra.(*Union)
 }
 
 // Interface contains Type fields specific to interface types.
@@ -465,6 +489,8 @@ func New(et EType) *Type {
 		t.Extra = new(Func)
 	case TSTRUCT:
 		t.Extra = new(Struct)
+	case TUNION:
+		t.Extra = new(Union)
 	case TINTER:
 		t.Extra = new(Interface)
 	case TPTR:
@@ -682,6 +708,20 @@ func SubstAny(t *Type, types *[]*Type) *Type {
 		}
 		t = t.copy()
 		t.SetFields(nfs)
+
+	case TUNION:
+		// Make a copy of all fields, including ones whose type does not change.
+		// This prevents aliasing across functions, which can lead to later
+		// fields getting their Offset incorrectly overwritten.
+		fields := t.FieldSlice()
+		nfs := make([]*Field, len(fields))
+		for i, f := range fields {
+			nft := SubstAny(f.Type, types)
+			nfs[i] = f.Copy()
+			nfs[i].Type = nft
+		}
+		t = t.copy()
+		t.SetFields(nfs)
 	}
 
 	return t
@@ -706,6 +746,9 @@ func (t *Type) copy() *Type {
 		nt.Extra = &x
 	case TSTRUCT:
 		x := *t.Extra.(*Struct)
+		nt.Extra = &x
+	case TUNION:
+		x := *t.Extra.(*Union)
 		nt.Extra = &x
 	case TINTER:
 		x := *t.Extra.(*Interface)
@@ -859,6 +902,8 @@ func (t *Type) Fields() *Fields {
 	switch t.Etype {
 	case TSTRUCT:
 		return &t.Extra.(*Struct).fields
+	case TUNION:
+		return &t.Extra.(*Union).fields
 	case TINTER:
 		Dowidth(t)
 		return &t.Extra.(*Interface).Fields
@@ -1143,6 +1188,47 @@ func (t *Type) cmp(x *Type) Cmp {
 		}
 		return CMPeq
 
+	case TUNION:
+		if t.UnionType().Map == nil {
+			if x.UnionType().Map != nil {
+				return CMPlt // nil < non-nil
+			}
+			// to the fallthrough
+		} else if x.UnionType().Map == nil {
+			return CMPgt // nil > non-nil
+		} else if t.UnionType().Map.MapType().Bucket == t {
+			// Both have non-nil Map
+			// Special case for Maps which include a recursive type where the recursion is not broken with a named type
+			if x.UnionType().Map.MapType().Bucket != x {
+				return CMPlt // bucket maps are least
+			}
+			return t.UnionType().Map.cmp(x.UnionType().Map)
+		} else if x.UnionType().Map.MapType().Bucket == x {
+			return CMPgt // bucket maps are least
+		} // If t != t.Map.Bucket, fall through to general case
+
+		tfs := t.FieldSlice()
+		xfs := x.FieldSlice()
+		for i := 0; i < len(tfs) && i < len(xfs); i++ {
+			t1, x1 := tfs[i], xfs[i]
+			if t1.Embedded != x1.Embedded {
+				return cmpForNe(t1.Embedded < x1.Embedded)
+			}
+			if t1.Note != x1.Note {
+				return cmpForNe(t1.Note < x1.Note)
+			}
+			if c := t1.Sym.cmpsym(x1.Sym); c != CMPeq {
+				return c
+			}
+			if c := t1.Type.cmp(x1.Type); c != CMPeq {
+				return c
+			}
+		}
+		if len(tfs) != len(xfs) {
+			return cmpForNe(len(tfs) < len(xfs))
+		}
+		return CMPeq
+
 	case TINTER:
 		tfs := t.FieldSlice()
 		xfs := x.FieldSlice()
@@ -1303,6 +1389,10 @@ func (t *Type) IsArray() bool {
 
 func (t *Type) IsStruct() bool {
 	return t.Etype == TSTRUCT
+}
+
+func (t *Type) IsUnion() bool {
+	return t.Etype == TUNION
 }
 
 func (t *Type) IsInterface() bool {
@@ -1466,6 +1556,14 @@ func Haspointers1(t *Type, ignoreNotInHeap bool) bool {
 		return Haspointers1(t.Elem(), ignoreNotInHeap)
 
 	case TSTRUCT:
+		for _, t1 := range t.Fields().Slice() {
+			if Haspointers1(t1.Type, ignoreNotInHeap) {
+				return true
+			}
+		}
+		return false
+
+	case TUNION:
 		for _, t1 := range t.Fields().Slice() {
 			if Haspointers1(t1.Type, ignoreNotInHeap) {
 				return true

@@ -138,6 +138,7 @@ var _typekind = []string{
 	TPTR:        "pointer",
 	TUNSAFEPTR:  "unsafe.Pointer",
 	TSTRUCT:     "struct",
+	TUNION:      "union",
 	TINTER:      "interface",
 	TCHAN:       "chan",
 	TMAP:        "map",
@@ -2532,7 +2533,7 @@ func lookdot(n *Node, t *types.Type, dostrcmp int) *types.Field {
 
 func nokeys(l Nodes) bool {
 	for _, n := range l.Slice() {
-		if n.Op == OKEY || n.Op == OSTRUCTKEY {
+		if n.Op == OKEY || n.Op == OSTRUCTKEY || n.Op == OUNIONKEY {
 			return false
 		}
 	}
@@ -3041,6 +3042,124 @@ func typecheckcomplit(n *Node) (res *Node) {
 		}
 
 		n.Op = OSTRUCTLIT
+		n.Right = nil
+
+	case TUNION:
+		// Need valid field offsets for Xoffset below.
+		dowidth(t)
+
+		errored := false
+		if n.List.Len() != 0 && nokeys(n.List) {
+			// simple list of variables
+			ls := n.List.Slice()
+			for i, n1 := range ls {
+				setlineno(n1)
+				n1 = typecheck(n1, ctxExpr)
+				ls[i] = n1
+				if i >= t.NumFields() {
+					if !errored {
+						yyerror("too many values in %v", n)
+						errored = true
+					}
+					continue
+				}
+
+				f := t.Field(i)
+				s := f.Sym
+				if s != nil && !types.IsExported(s.Name) && s.Pkg != localpkg {
+					yyerror("implicit assignment of unexported field '%s' in %v literal", s.Name, t)
+				}
+				// No pushtype allowed here. Must name fields for that.
+				n1 = assignconv(n1, f.Type, "field value")
+				n1 = nodSym(OUNIONKEY, n1, f.Sym)
+				n1.Xoffset = f.Offset
+				ls[i] = n1
+			}
+			if len(ls) < t.NumFields() {
+				yyerror("too few values in %v", n)
+			}
+		} else {
+			hash := make(map[string]bool)
+
+			// keyed list
+			ls := n.List.Slice()
+			for i, l := range ls {
+				setlineno(l)
+
+				if l.Op == OKEY {
+					key := l.Left
+
+					l.Op = OUNIONKEY
+					l.Left = l.Right
+					l.Right = nil
+
+					// An OXDOT uses the Sym field to hold
+					// the field to the right of the dot,
+					// so s will be non-nil, but an OXDOT
+					// is never a valid struct literal key.
+					if key.Sym == nil || key.Op == OXDOT || key.Sym.IsBlank() {
+						yyerror("invalid field name %v in struct initializer", key)
+						l.Left = typecheck(l.Left, ctxExpr)
+						continue
+					}
+
+					// Sym might have resolved to name in other top-level
+					// package, because of import dot. Redirect to correct sym
+					// before we do the lookup.
+					s := key.Sym
+					if s.Pkg != localpkg && types.IsExported(s.Name) {
+						s1 := lookup(s.Name)
+						if s1.Origpkg == s.Pkg {
+							s = s1
+						}
+					}
+					l.Sym = s
+				}
+
+				if l.Op != OUNIONKEY {
+					if !errored {
+						yyerror("mixture of field:value and value initializers")
+						errored = true
+					}
+					ls[i] = typecheck(ls[i], ctxExpr)
+					continue
+				}
+
+				f := lookdot1(nil, l.Sym, t, t.Fields(), 0)
+				if f == nil {
+					if ci := lookdot1(nil, l.Sym, t, t.Fields(), 2); ci != nil { // Case-insensitive lookup.
+						if visible(ci.Sym) {
+							yyerror("unknown field '%v' in struct literal of type %v (but does have %v)", l.Sym, t, ci.Sym)
+						} else {
+							yyerror("unknown field '%v' in struct literal of type %v", l.Sym, t)
+						}
+						continue
+					}
+					var f *types.Field
+					p, _ := dotpath(l.Sym, t, &f, true)
+					if p == nil || f.IsMethod() {
+						yyerror("unknown field '%v' in struct literal of type %v", l.Sym, t)
+						continue
+					}
+					// dotpath returns the parent embedded types in reverse order.
+					var ep []string
+					for ei := len(p) - 1; ei >= 0; ei-- {
+						ep = append(ep, p[ei].field.Sym.Name)
+					}
+					ep = append(ep, l.Sym.Name)
+					yyerror("cannot use promoted field %v in struct literal of type %v", strings.Join(ep, "."), t)
+					continue
+				}
+				fielddup(f.Sym.Name, hash)
+				l.Xoffset = f.Offset
+
+				// No pushtype allowed here. Tried and rejected.
+				l.Left = typecheck(l.Left, ctxExpr)
+				l.Left = assignconv(l.Left, f.Type, "field value")
+			}
+		}
+
+		n.Op = OUNIONLIT
 		n.Right = nil
 	}
 

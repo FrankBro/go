@@ -116,7 +116,7 @@ func (s *InitSchedule) staticcopy(l *Node, r *Node) bool {
 
 	case OPTRLIT:
 		switch r.Left.Op {
-		case OARRAYLIT, OSLICELIT, OSTRUCTLIT, OMAPLIT:
+		case OARRAYLIT, OSLICELIT, OSTRUCTLIT, OUNIONLIT, OMAPLIT:
 			// copy pointer
 			gdata(l, nod(OADDR, s.inittemps[r], nil), int(l.Type.Width))
 			return true
@@ -135,7 +135,7 @@ func (s *InitSchedule) staticcopy(l *Node, r *Node) bool {
 		gdata(n, r.Right, Widthptr)
 		return true
 
-	case OARRAYLIT, OSTRUCTLIT:
+	case OARRAYLIT, OSTRUCTLIT, OUNIONLIT:
 		p := s.initplans[r]
 
 		n := l.copy()
@@ -194,7 +194,7 @@ func (s *InitSchedule) staticassign(l *Node, r *Node) bool {
 
 	case OPTRLIT:
 		switch r.Left.Op {
-		case OARRAYLIT, OSLICELIT, OMAPLIT, OSTRUCTLIT:
+		case OARRAYLIT, OSLICELIT, OMAPLIT, OSTRUCTLIT, OUNIONLIT:
 			// Init pointer.
 			a := staticname(r.Left.Type)
 
@@ -235,7 +235,7 @@ func (s *InitSchedule) staticassign(l *Node, r *Node) bool {
 		l = a
 		fallthrough
 
-	case OARRAYLIT, OSTRUCTLIT:
+	case OARRAYLIT, OSTRUCTLIT, OUNIONLIT:
 		s.initplan(r)
 
 		p := s.initplans[r]
@@ -427,7 +427,7 @@ func getdyn(n *Node, top bool) initGenType {
 			return initDynamic
 		}
 
-	case OARRAYLIT, OSTRUCTLIT:
+	case OARRAYLIT, OSTRUCTLIT, OUNIONLIT:
 	}
 
 	var mode initGenType
@@ -436,6 +436,8 @@ func getdyn(n *Node, top bool) initGenType {
 		case OKEY:
 			n1 = n1.Right
 		case OSTRUCTKEY:
+			n1 = n1.Left
+		case OUNIONKEY:
 			n1 = n1.Left
 		}
 		mode |= getdyn(n1, false)
@@ -466,6 +468,16 @@ func isStaticCompositeLiteral(n *Node) bool {
 			if r.Op != OSTRUCTKEY {
 				Fatalf("isStaticCompositeLiteral: rhs not OSTRUCTKEY: %v", r)
 			}
+			if r.Op != OUNIONKEY {
+				Fatalf("isStaticCompositeLiteral: rhs not OUNIONKEY: %v", r)
+			}
+			if !isStaticCompositeLiteral(r.Left) {
+				return false
+			}
+		}
+		return true
+	case OUNIONLIT:
+		for _, r := range n.List.Slice() {
 			if !isStaticCompositeLiteral(r.Left) {
 				return false
 			}
@@ -507,7 +519,7 @@ const (
 	initKindLocalCode
 )
 
-// fixedlit handles struct, array, and slice literals.
+// fixedlit handles struct, union, array, and slice literals.
 // TODO: expand documentation.
 func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes) {
 	var splitnode func(*Node) (a *Node, value *Node)
@@ -531,6 +543,17 @@ func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes)
 			if r.Op != OSTRUCTKEY {
 				Fatalf("fixedlit: rhs not OSTRUCTKEY: %v", r)
 			}
+			if r.Op != OUNIONKEY {
+				Fatalf("fixedlit: rhs not OUNIONKEY: %v", r)
+			}
+			if r.Sym.IsBlank() {
+				return nblank, r.Left
+			}
+			setlineno(r)
+			return nodSym(ODOT, var_, r.Sym), r.Left
+		}
+	case OUNIONLIT:
+		splitnode = func(r *Node) (*Node, *Node) {
 			if r.Sym.IsBlank() {
 				return nblank, r.Left
 			}
@@ -551,7 +574,7 @@ func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes)
 				continue
 			}
 
-		case OARRAYLIT, OSTRUCTLIT:
+		case OARRAYLIT, OSTRUCTLIT, OUNIONLIT:
 			fixedlit(ctxt, kind, value, a, init)
 			continue
 		}
@@ -718,7 +741,7 @@ func slicelit(ctxt initContext, n *Node, var_ *Node, init *Nodes) {
 		case OSLICELIT:
 			break
 
-		case OARRAYLIT, OSTRUCTLIT:
+		case OARRAYLIT, OSTRUCTLIT, OUNIONLIT:
 			k := initKindDynamic
 			if vstat == nil {
 				// Generate both static and dynamic initializations.
@@ -898,9 +921,9 @@ func anylit(n *Node, var_ *Node, init *Nodes) {
 		var_ = typecheck(var_, ctxExpr|ctxAssign)
 		anylit(n.Left, var_, init)
 
-	case OSTRUCTLIT, OARRAYLIT:
-		if !t.IsStruct() && !t.IsArray() {
-			Fatalf("anylit: not struct/array")
+	case OSTRUCTLIT, OUNIONLIT, OARRAYLIT:
+		if !t.IsStruct() && !t.IsUnion() && !t.IsArray() {
+			Fatalf("anylit: not struct/union/array")
 		}
 
 		if var_.isSimpleName() && n.List.Len() > 4 {
@@ -976,7 +999,7 @@ func oaslit(n *Node, init *Nodes) bool {
 		// not a special composite literal assignment
 		return false
 
-	case OSTRUCTLIT, OARRAYLIT, OSLICELIT, OMAPLIT:
+	case OSTRUCTLIT, OUNIONLIT, OARRAYLIT, OSLICELIT, OMAPLIT:
 		if vmatch1(n.Left, n.Right) {
 			// not a special composite literal assignment
 			return false
@@ -1074,6 +1097,17 @@ func (s *InitSchedule) initplan(n *Node) {
 			s.addvalue(p, a.Xoffset, a.Left)
 		}
 
+	case OUNIONLIT:
+		for _, a := range n.List.Slice() {
+			if a.Op != OUNIONKEY {
+				Fatalf("initplan unionlit")
+			}
+			if a.Sym.IsBlank() {
+				continue
+			}
+			s.addvalue(p, a.Xoffset, a.Left)
+		}
+
 	case OMAPLIT:
 		for _, a := range n.List.Slice() {
 			if a.Op != OKEY {
@@ -1145,13 +1179,21 @@ func isZero(n *Node) bool {
 			}
 		}
 		return true
+
+	case OUNIONLIT:
+		for _, n1 := range n.List.Slice() {
+			if !isZero(n1.Left) {
+				return false
+			}
+		}
+		return true
 	}
 
 	return false
 }
 
 func isvaluelit(n *Node) bool {
-	return n.Op == OARRAYLIT || n.Op == OSTRUCTLIT
+	return n.Op == OARRAYLIT || n.Op == OSTRUCTLIT || n.Op == OUNIONLIT
 }
 
 func genAsStatic(as *Node) {

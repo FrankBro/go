@@ -551,6 +551,11 @@ func (e *Escape) exprSkipInit(k EscHole, n *Node) {
 			e.expr(k.note(n, "struct literal element"), elt.Left)
 		}
 
+	case OUNIONLIT:
+		for _, elt := range n.List.Slice() {
+			e.expr(k.note(n, "union literal element"), elt.Left)
+		}
+
 	case OMAPLIT:
 		e.spill(k, n)
 
@@ -1299,7 +1304,7 @@ func (e *Escape) finish() {
 			n.Esc = EscNone
 			if loc.transient {
 				switch n.Op {
-				case OCALLPART, OCLOSURE, ODDDARG, OARRAYLIT, OSLICELIT, OPTRLIT, OSTRUCTLIT:
+				case OCALLPART, OCLOSURE, ODDDARG, OARRAYLIT, OSLICELIT, OPTRLIT, OSTRUCTLIT, OUNIONLIT:
 					n.SetNoescape(true)
 				}
 			}

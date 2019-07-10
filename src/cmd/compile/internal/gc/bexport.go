@@ -59,6 +59,13 @@ func (p *exporter) markType(t *types.Type) {
 			}
 		}
 
+	case TUNION:
+		for _, f := range t.FieldSlice() {
+			if types.IsExported(f.Sym.Name) || f.Embedded != 0 {
+				p.markType(f.Type)
+			}
+		}
+
 	case TFUNC:
 		// If t is the type of a function or method, then
 		// t.Nname() is its ONAME. Mark its inline body and

@@ -259,6 +259,12 @@ func mapKeyReplaceStrConv(n *Node) bool {
 				replaced = true
 			}
 		}
+	case OUNIONLIT:
+		for _, elem := range n.List.Slice() {
+			if mapKeyReplaceStrConv(elem.Left) {
+				replaced = true
+			}
+		}
 	case OARRAYLIT:
 		for _, elem := range n.List.Slice() {
 			if elem.Op == OKEY {

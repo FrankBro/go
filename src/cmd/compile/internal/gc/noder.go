@@ -688,6 +688,8 @@ func (p *noder) expr(expr syntax.Expr) *Node {
 		return p.nod(expr, ODDD, p.typeExpr(expr.Elem), nil)
 	case *syntax.StructType:
 		return p.structType(expr)
+	case *syntax.UnionType:
+		return p.unionType(expr)
 	case *syntax.InterfaceType:
 		return p.interfaceType(expr)
 	case *syntax.FuncType:
@@ -830,6 +832,28 @@ func (p *noder) structType(expr *syntax.StructType) *Node {
 
 	p.setlineno(expr)
 	n := p.nod(expr, OTSTRUCT, nil, nil)
+	n.List.Set(l)
+	return n
+}
+
+func (p *noder) unionType(expr *syntax.UnionType) *Node {
+	var l []*Node
+	for i, field := range expr.FieldList {
+		p.setlineno(field)
+		var n *Node
+		if field.Name == nil {
+			n = p.embedded(field.Type)
+		} else {
+			n = p.nodSym(field, ODCLFIELD, p.typeExpr(field.Type), p.name(field.Name))
+		}
+		if i < len(expr.TagList) && expr.TagList[i] != nil {
+			n.SetVal(p.basicLit(expr.TagList[i]))
+		}
+		l = append(l, n)
+	}
+
+	p.setlineno(expr)
+	n := p.nod(expr, OTUNION, nil, nil)
 	n.List.Set(l)
 	return n
 }

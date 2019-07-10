@@ -1109,6 +1109,7 @@ var opprec = []int{
 	OSTR2BYTES:   8,
 	OSTR2RUNES:   8,
 	OSTRUCTLIT:   8,
+	OUNIONLIT:    8,
 	OTARRAY:      8,
 	OTCHAN:       8,
 	OTFUNC:       8,
@@ -1329,7 +1330,7 @@ func (n *Node) exprfmt(s fmt.State, prec int, mode fmtMode) {
 	case OPTRLIT:
 		mode.Fprintf(s, "&%v", n.Left)
 
-	case OSTRUCTLIT, OARRAYLIT, OSLICELIT, OMAPLIT:
+	case OSTRUCTLIT, OUNIONLIT, OARRAYLIT, OSLICELIT, OMAPLIT:
 		if mode == FErr {
 			mode.Fprintf(s, "%v literal", n.Type)
 			return
@@ -1353,6 +1354,9 @@ func (n *Node) exprfmt(s fmt.State, prec int, mode fmtMode) {
 		fmt.Fprint(s, ":")
 
 	case OSTRUCTKEY:
+		mode.Fprintf(s, "%v:%v", n.Sym, n.Left)
+
+	case OUNIONKEY:
 		mode.Fprintf(s, "%v:%v", n.Sym, n.Left)
 
 	case OCALLPART:

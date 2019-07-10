@@ -961,7 +961,7 @@ func (s *state) stmt(n *Node) {
 		rhs := n.Right
 		if rhs != nil {
 			switch rhs.Op {
-			case OSTRUCTLIT, OARRAYLIT, OSLICELIT:
+			case OSTRUCTLIT, OUNIONLIT, OARRAYLIT, OSLICELIT:
 				// All literals with nonzero fields have already been
 				// rewritten during walk. Any that remain are just T{}
 				// or equivalents. Use the zero value.
@@ -2452,7 +2452,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 	case OAPPEND:
 		return s.append(n, false)
 
-	case OSTRUCTLIT, OARRAYLIT:
+	case OSTRUCTLIT, OUNIONLIT, OARRAYLIT:
 		// All literals with nonzero fields have already been
 		// rewritten during walk. Any that remain are just T{}
 		// or equivalents. Use the zero value.

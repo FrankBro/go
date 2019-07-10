@@ -37,6 +37,7 @@ const (
 	TSLICE     = types.TSLICE
 	TARRAY     = types.TARRAY
 	TSTRUCT    = types.TSTRUCT
+	TUNION     = types.TUNION
 	TCHAN      = types.TCHAN
 	TMAP       = types.TMAP
 	TINTER     = types.TINTER
