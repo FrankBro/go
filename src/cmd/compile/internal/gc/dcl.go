@@ -593,7 +593,7 @@ func checkdupfields(what string, ts ...*types.Type) {
 }
 
 // convert a parsed id/type list into
-// a type for struct/interface/arglist
+// a type for struct/union/interface/arglist
 func tostruct(l []*Node) *types.Type {
 	t := types.New(TSTRUCT)
 	tostruct0(t, l)

@@ -381,6 +381,10 @@ func decomposeArrayPhi(v *Value) {
 // can have and still be SSAable.
 const MaxStruct = 4
 
+// MaxUnion is the maximum number of fields a union
+// can have and still be SSAable.
+const MaxUnion = 4
+
 // StructMakeOp returns the opcode to construct a struct with the
 // given number of fields.
 func StructMakeOp(nf int) Op {

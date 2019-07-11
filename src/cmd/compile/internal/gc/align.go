@@ -427,7 +427,7 @@ func dowidth(t *types.Type) {
 		w = widstruct(t, t, 0, 1)
 
 	case TUNION:
-		if t.IsFuncArgStruct() {
+		if t.IsFuncArgUnion() {
 			Fatalf("dowidth fn union %v", t)
 		}
 		w = widunion(t, t, 0, 1)

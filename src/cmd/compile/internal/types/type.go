@@ -888,6 +888,11 @@ func (t *Type) IsFuncArgStruct() bool {
 	return t.Etype == TSTRUCT && t.Extra.(*Struct).Funarg != FunargNone
 }
 
+// IsFuncArgUnion reports whether t is a union representing function parameters.
+func (t *Type) IsFuncArgUnion() bool {
+	return t.Etype == TUNION && t.Extra.(*Union).Funarg != FunargNone
+}
+
 func (t *Type) Methods() *Fields {
 	// TODO(mdempsky): Validate t?
 	return &t.methods

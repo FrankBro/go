@@ -233,6 +233,7 @@ const (
 	mapType
 	signatureType
 	structType
+	unionType
 	interfaceType
 )
 
@@ -646,6 +647,19 @@ func (w *exportWriter) doTyp(t *types.Type) {
 
 	case TSTRUCT:
 		w.startType(structType)
+		w.setPkg(t.Pkg(), true)
+
+		w.uint64(uint64(t.NumFields()))
+		for _, f := range t.FieldSlice() {
+			w.pos(f.Pos)
+			w.selector(f.Sym)
+			w.typ(f.Type)
+			w.bool(f.Embedded != 0)
+			w.string(f.Note)
+		}
+
+	case TUNION:
+		w.startType(unionType)
 		w.setPkg(t.Pkg(), true)
 
 		w.uint64(uint64(t.NumFields()))
@@ -1172,7 +1186,7 @@ func (w *exportWriter) expr(n *Node) {
 		w.op(OTYPE)
 		w.typ(n.Type)
 
-	// case OTARRAY, OTMAP, OTCHAN, OTSTRUCT, OTINTER, OTFUNC:
+	// case OTARRAY, OTMAP, OTCHAN, OTSTRUCT, OTUNION, OTINTER, OTFUNC:
 	// 	should have been resolved by typechecking - handled by default case
 
 	// case OCLOSURE:

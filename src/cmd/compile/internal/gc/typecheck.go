@@ -514,6 +514,17 @@ func typecheck1(n *Node, top int) (res *Node) {
 		}
 		n.List.Set(nil)
 
+	case OTUNION:
+		ok |= Etype
+		n.Op = OTYPE
+		// FIXME: Not sure if I need a tounion considering tostruct is supposed to deal with struct, interface and arg list
+		n.Type = tostruct(n.List.Slice())
+		if n.Type == nil || n.Type.Broke() {
+			n.Type = nil
+			return n
+		}
+		n.List.Set(nil)
+
 	case OTINTER:
 		ok |= Etype
 		n.Op = OTYPE
@@ -2746,7 +2757,7 @@ func iscomptype(t *types.Type) bool {
 	}
 
 	switch t.Etype {
-	case TARRAY, TSLICE, TSTRUCT, TMAP:
+	case TARRAY, TSLICE, TSTRUCT, TUNION, TMAP:
 		return true
 	default:
 		return false
@@ -3096,9 +3107,9 @@ func typecheckcomplit(n *Node) (res *Node) {
 					// An OXDOT uses the Sym field to hold
 					// the field to the right of the dot,
 					// so s will be non-nil, but an OXDOT
-					// is never a valid struct literal key.
+					// is never a valid union literal key.
 					if key.Sym == nil || key.Op == OXDOT || key.Sym.IsBlank() {
-						yyerror("invalid field name %v in struct initializer", key)
+						yyerror("invalid field name %v in union initializer", key)
 						l.Left = typecheck(l.Left, ctxExpr)
 						continue
 					}
@@ -3129,16 +3140,16 @@ func typecheckcomplit(n *Node) (res *Node) {
 				if f == nil {
 					if ci := lookdot1(nil, l.Sym, t, t.Fields(), 2); ci != nil { // Case-insensitive lookup.
 						if visible(ci.Sym) {
-							yyerror("unknown field '%v' in struct literal of type %v (but does have %v)", l.Sym, t, ci.Sym)
+							yyerror("unknown field '%v' in union literal of type %v (but does have %v)", l.Sym, t, ci.Sym)
 						} else {
-							yyerror("unknown field '%v' in struct literal of type %v", l.Sym, t)
+							yyerror("unknown field '%v' in union literal of type %v", l.Sym, t)
 						}
 						continue
 					}
 					var f *types.Field
 					p, _ := dotpath(l.Sym, t, &f, true)
 					if p == nil || f.IsMethod() {
-						yyerror("unknown field '%v' in struct literal of type %v", l.Sym, t)
+						yyerror("unknown field '%v' in union literal of type %v", l.Sym, t)
 						continue
 					}
 					// dotpath returns the parent embedded types in reverse order.
@@ -3147,7 +3158,7 @@ func typecheckcomplit(n *Node) (res *Node) {
 						ep = append(ep, p[ei].field.Sym.Name)
 					}
 					ep = append(ep, l.Sym.Name)
-					yyerror("cannot use promoted field %v in struct literal of type %v", strings.Join(ep, "."), t)
+					yyerror("cannot use promoted field %v in union literal of type %v", strings.Join(ep, "."), t)
 					continue
 				}
 				fielddup(f.Sym.Name, hash)

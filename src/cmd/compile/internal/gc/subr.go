@@ -522,7 +522,7 @@ func methtype(t *types.Type) *types.Type {
 		return t
 	}
 	switch t.Etype {
-	case TARRAY, TCHAN, TFUNC, TMAP, TSLICE, TSTRING, TSTRUCT:
+	case TARRAY, TCHAN, TFUNC, TMAP, TSLICE, TSTRING, TSTRUCT, TUNION:
 		return t
 	}
 	return nil
@@ -1149,7 +1149,7 @@ func cheapexpr(n *Node, init *Nodes) *Node {
 // Code to resolve elided DOTs in embedded types.
 
 // A Dlist stores a pointer to a TFIELD Type embedded within
-// a TSTRUCT or TINTER Type.
+// a TSTRUCT, TUNION or TINTER Type.
 type Dlist struct {
 	field *types.Field
 }
@@ -1841,6 +1841,10 @@ func isdirectiface(t *types.Type) bool {
 
 	case TSTRUCT:
 		// Struct with 1 field of direct iface type can be direct.
+		return t.NumFields() == 1 && isdirectiface(t.Field(0).Type)
+
+	case TUNION:
+		// Union with 1 field of direct iface type can be direct.
 		return t.NumFields() == 1 && isdirectiface(t.Field(0).Type)
 	}
 

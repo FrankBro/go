@@ -4137,6 +4137,16 @@ func canSSAType(t *types.Type) bool {
 			}
 		}
 		return true
+	case TUNION:
+		if t.NumFields() > ssa.MaxUnion {
+			return false
+		}
+		for _, t1 := range t.Fields().Slice() {
+			if !canSSAType(t1.Type) {
+				return false
+			}
+		}
+		return true
 	default:
 		return true
 	}

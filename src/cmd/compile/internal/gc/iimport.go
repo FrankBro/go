@@ -562,6 +562,33 @@ func (r *importReader) typ1() *types.Type {
 		t.SetFields(fs)
 		return t
 
+	case unionType:
+		r.setPkg()
+
+		fs := make([]*types.Field, r.uint64())
+		for i := range fs {
+			pos := r.pos()
+			sym := r.ident()
+			typ := r.typ()
+			emb := r.bool()
+			note := r.string()
+
+			f := types.NewField()
+			f.Pos = pos
+			f.Sym = sym
+			f.Type = typ
+			if emb {
+				f.Embedded = 1
+			}
+			f.Note = note
+			fs[i] = f
+		}
+
+		t := types.New(TUNION)
+		t.SetPkg(r.currPkg)
+		t.SetFields(fs)
+		return t
+
 	case interfaceType:
 		r.setPkg()
 
@@ -808,7 +835,7 @@ func (r *importReader) node() *Node {
 	case OTYPE:
 		return typenod(r.typ())
 
-	// case OTARRAY, OTMAP, OTCHAN, OTSTRUCT, OTINTER, OTFUNC:
+	// case OTARRAY, OTMAP, OTCHAN, OTSTRUCT, OTUNION, OTINTER, OTFUNC:
 	//      unreachable - should have been resolved by typechecking
 
 	// case OCLOSURE:

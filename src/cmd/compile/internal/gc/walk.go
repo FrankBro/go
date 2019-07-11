@@ -3116,6 +3116,8 @@ func walkcompare(n *Node, init *Nodes) *Node {
 		inline = t.NumElem() <= 1 || (issimple[t.Elem().Etype] && (t.NumElem() <= 4 || t.Elem().Width*t.NumElem() <= maxcmpsize))
 	case TSTRUCT:
 		inline = t.NumComponents(types.IgnoreBlankFields) <= 4
+	case TUNION:
+		inline = t.NumComponents(types.IgnoreBlankFields) <= 4
 	}
 
 	cmpl := n.Left

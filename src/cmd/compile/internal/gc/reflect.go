@@ -757,6 +757,7 @@ var kinds = []int{
 	TSTRING:     objabi.KindString,
 	TPTR:        objabi.KindPtr,
 	TSTRUCT:     objabi.KindStruct,
+	TUNION:      objabi.KindUnion,
 	TINTER:      objabi.KindInterface,
 	TCHAN:       objabi.KindChan,
 	TMAP:        objabi.KindMap,
@@ -802,6 +803,16 @@ func typeptrdata(t *types.Type) int64 {
 		return (t.NumElem()-1)*t.Elem().Width + typeptrdata(t.Elem())
 
 	case TSTRUCT:
+		// Find the last field that has pointers.
+		var lastPtrField *types.Field
+		for _, t1 := range t.Fields().Slice() {
+			if types.Haspointers(t1.Type) {
+				lastPtrField = t1
+			}
+		}
+		return lastPtrField.Offset + typeptrdata(lastPtrField.Type)
+
+	case TUNION:
 		// Find the last field that has pointers.
 		var lastPtrField *types.Field
 		for _, t1 := range t.Fields().Slice() {
@@ -1095,6 +1106,14 @@ func isreflexive(t *types.Type) bool {
 		}
 		return true
 
+	case TUNION:
+		for _, t1 := range t.Fields().Slice() {
+			if !isreflexive(t1.Type) {
+				return false
+			}
+		}
+		return true
+
 	default:
 		Fatalf("bad type for map key: %v", t)
 		return false
@@ -1125,6 +1144,14 @@ func needkeyupdate(t *types.Type) bool {
 		}
 		return false
 
+	case TUNION:
+		for _, t1 := range t.Fields().Slice() {
+			if needkeyupdate(t1.Type) {
+				return true
+			}
+		}
+		return false
+
 	default:
 		Fatalf("bad type for map key: %v", t)
 		return true
@@ -1141,6 +1168,14 @@ func hashMightPanic(t *types.Type) bool {
 		return hashMightPanic(t.Elem())
 
 	case TSTRUCT:
+		for _, t1 := range t.Fields().Slice() {
+			if hashMightPanic(t1.Type) {
+				return true
+			}
+		}
+		return false
+
+	case TUNION:
 		for _, t1 := range t.Fields().Slice() {
 			if hashMightPanic(t1.Type) {
 				return true
@@ -1403,6 +1438,50 @@ func dtypesym(t *types.Type) *obj.LSym {
 			}
 			ot = duintptr(lsym, ot, offsetAnon)
 		}
+
+	// ../../../../runtime/type.go:/unionType
+	// for security, only the exported fields.
+	case TUNION:
+		fields := t.Fields().Slice()
+		for _, t1 := range fields {
+			dtypesym(t1.Type)
+		}
+
+		// All non-exported union field names within an union
+		// type must originate from a single package. By
+		// identifying and recording that package within the
+		// union type descriptor, we can omit that
+		// information from the field descriptors.
+		var spkg *types.Pkg
+		for _, f := range fields {
+			if !types.IsExported(f.Sym.Name) {
+				spkg = f.Sym.Pkg
+				break
+			}
+		}
+
+		ot = dcommontype(lsym, t)
+		ot = dgopkgpath(lsym, ot, spkg)
+		ot = dsymptr(lsym, ot, lsym, ot+3*Widthptr+uncommonSize(t))
+		ot = duintptr(lsym, ot, uint64(len(fields)))
+		ot = duintptr(lsym, ot, uint64(len(fields)))
+
+		dataAdd := len(fields) * structfieldSize()
+		ot = dextratype(lsym, ot, t, dataAdd)
+
+		for _, f := range fields {
+			// ../../../../runtime/type.go:/unionField
+			ot = dnameField(lsym, ot, spkg, f)
+			ot = dsymptr(lsym, ot, dtypesym(f.Type), 0)
+			offsetAnon := uint64(f.Offset) << 1
+			if offsetAnon>>1 != uint64(f.Offset) {
+				Fatalf("%v: bad field offset for %s", t, f.Sym.Name)
+			}
+			if f.Embedded != 0 {
+				offsetAnon |= 1
+			}
+			ot = duintptr(lsym, ot, offsetAnon)
+		}
 	}
 
 	ot = dextratypeData(lsym, ot, t)
@@ -1421,7 +1500,7 @@ func dtypesym(t *types.Type) *obj.LSym {
 		// functions must return the existing type structure rather
 		// than creating a new one.
 		switch t.Etype {
-		case TPTR, TARRAY, TCHAN, TFUNC, TMAP, TSLICE, TSTRUCT:
+		case TPTR, TARRAY, TCHAN, TFUNC, TMAP, TSLICE, TSTRUCT, TUNION:
 			keep = true
 		}
 	}
@@ -1935,6 +2014,11 @@ func (p *GCProg) emit(t *types.Type, offset int64) {
 		p.w.Repeat(elem.Width/int64(Widthptr), count-1)
 
 	case TSTRUCT:
+		for _, t1 := range t.Fields().Slice() {
+			p.emit(t1.Type, offset+t1.Offset)
+		}
+
+	case TUNION:
 		for _, t1 := range t.Fields().Slice() {
 			p.emit(t1.Type, offset+t1.Offset)
 		}

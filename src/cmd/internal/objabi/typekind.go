@@ -33,6 +33,7 @@ const (
 	KindSlice
 	KindString
 	KindStruct
+	KindUnion
 	KindUnsafePointer
 	KindDirectIface = 1 << 5
 	KindGCProg      = 1 << 6

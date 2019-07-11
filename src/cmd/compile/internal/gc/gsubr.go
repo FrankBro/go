@@ -309,7 +309,7 @@ func ggloblsym(s *obj.LSym, width int32, flags int16) {
 func isfat(t *types.Type) bool {
 	if t != nil {
 		switch t.Etype {
-		case TSTRUCT, TARRAY, TSLICE, TSTRING,
+		case TSTRUCT, TUNION, TARRAY, TSLICE, TSTRING,
 			TINTER: // maybe remove later
 			return true
 		}

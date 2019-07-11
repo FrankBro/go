@@ -264,6 +264,7 @@ func typeinit() {
 	okforeq[TSLICE] = true  // nil only; refined in typecheck
 	okforeq[TARRAY] = true  // only if element type is comparable; refined in typecheck
 	okforeq[TSTRUCT] = true // only if all struct fields are comparable; refined in typecheck
+	okforeq[TUNION] = true  // only if all union fields are comparable; refined in typecheck
 
 	okforcmp[TSTRING] = true
 

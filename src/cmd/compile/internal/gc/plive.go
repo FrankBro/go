@@ -590,6 +590,11 @@ func onebitwalktype1(t *types.Type, off int64, bv bvec) {
 			onebitwalktype1(f.Type, off+f.Offset, bv)
 		}
 
+	case TUNION:
+		for _, f := range t.Fields().Slice() {
+			onebitwalktype1(f.Type, off+f.Offset, bv)
+		}
+
 	default:
 		Fatalf("onebitwalktype1: unexpected type, %v", t)
 	}
