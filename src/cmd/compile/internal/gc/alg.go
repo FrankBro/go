@@ -193,12 +193,6 @@ func algtype1(t *types.Type) (AlgKind, *types.Type) {
 			if a == ANOEQ {
 				return ANOEQ, bad
 			}
-
-			// Blank fields, padded fields, fields with non-memory
-			// equality need special compare.
-			if a != AMEM || f.Sym.IsBlank() || ispaddedfield(t, i) {
-				ret = ASPECIAL
-			}
 		}
 
 		return ret, nil
@@ -264,46 +258,6 @@ func genhash(sym *types.Sym, t *types.Type) {
 
 	case types.TSTRUCT:
 		// Walk the struct using memhash for runs of AMEM
-		// and calling specific hash functions for the others.
-		for i, fields := 0, t.FieldSlice(); i < len(fields); {
-			f := fields[i]
-
-			// Skip blank fields.
-			if f.Sym.IsBlank() {
-				i++
-				continue
-			}
-
-			// Hash non-memory fields with appropriate hash function.
-			if !IsRegularMemory(f.Type) {
-				hashel := hashfor(f.Type)
-				call := nod(OCALL, hashel, nil)
-				nx := nodSym(OXDOT, np, f.Sym) // TODO: fields from other packages?
-				na := nod(OADDR, nx, nil)
-				call.List.Append(na)
-				call.List.Append(nh)
-				fn.Nbody.Append(nod(OAS, nh, call))
-				i++
-				continue
-			}
-
-			// Otherwise, hash a maximal length run of raw memory.
-			size, next := memrun(t, i)
-
-			// h = hashel(&p.first, size, h)
-			hashel := hashmem(f.Type)
-			call := nod(OCALL, hashel, nil)
-			nx := nodSym(OXDOT, np, f.Sym) // TODO: fields from other packages?
-			na := nod(OADDR, nx, nil)
-			call.List.Append(na)
-			call.List.Append(nh)
-			call.List.Append(nodintconst(size))
-			fn.Nbody.Append(nod(OAS, nh, call))
-
-			i = next
-		}
-	case types.TUNION:
-		// Walk the union using memhash for runs of AMEM
 		// and calling specific hash functions for the others.
 		for i, fields := 0, t.FieldSlice(); i < len(fields); {
 			f := fields[i]
@@ -480,59 +434,6 @@ func geneq(sym *types.Sym, t *types.Type) {
 		}
 
 		// Walk the struct using memequal for runs of AMEM
-		// and calling specific equality tests for the others.
-		for i, fields := 0, t.FieldSlice(); i < len(fields); {
-			f := fields[i]
-
-			// Skip blank-named fields.
-			if f.Sym.IsBlank() {
-				i++
-				continue
-			}
-
-			// Compare non-memory fields with field equality.
-			if !IsRegularMemory(f.Type) {
-				and(eqfield(np, nq, f.Sym))
-				i++
-				continue
-			}
-
-			// Find maximal length run of memory-only fields.
-			size, next := memrun(t, i)
-
-			// TODO(rsc): All the calls to newname are wrong for
-			// cross-package unexported fields.
-			if s := fields[i:next]; len(s) <= 2 {
-				// Two or fewer fields: use plain field equality.
-				for _, f := range s {
-					and(eqfield(np, nq, f.Sym))
-				}
-			} else {
-				// More than two fields: use memequal.
-				and(eqmem(np, nq, f.Sym, size))
-			}
-			i = next
-		}
-
-		if cond == nil {
-			cond = nodbool(true)
-		}
-
-		ret := nod(ORETURN, nil, nil)
-		ret.List.Append(cond)
-		fn.Nbody.Append(ret)
-
-	case TUNION:
-		var cond *Node
-		and := func(n *Node) {
-			if cond == nil {
-				cond = n
-				return
-			}
-			cond = nod(OANDAND, cond, n)
-		}
-
-		// Walk the union using memequal for runs of AMEM
 		// and calling specific equality tests for the others.
 		for i, fields := 0, t.FieldSlice(); i < len(fields); {
 			f := fields[i]

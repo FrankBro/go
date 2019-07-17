@@ -813,6 +813,7 @@ func typeptrdata(t *types.Type) int64 {
 		return lastPtrField.Offset + typeptrdata(lastPtrField.Type)
 
 	case TUNION:
+		// FRANKBRO: Is this okay like that?
 		// Find the last field that has pointers.
 		var lastPtrField *types.Field
 		for _, t1 := range t.Fields().Slice() {
@@ -1107,6 +1108,7 @@ func isreflexive(t *types.Type) bool {
 		return true
 
 	case TUNION:
+		// FRANKBRO: Maybe should always be false? Comparison would always use memory anyway
 		for _, t1 := range t.Fields().Slice() {
 			if !isreflexive(t1.Type) {
 				return false
@@ -1145,6 +1147,7 @@ func needkeyupdate(t *types.Type) bool {
 		return false
 
 	case TUNION:
+		// FRANKBRO: Should probably not allow unions to be a map key
 		for _, t1 := range t.Fields().Slice() {
 			if needkeyupdate(t1.Type) {
 				return true
@@ -1168,14 +1171,6 @@ func hashMightPanic(t *types.Type) bool {
 		return hashMightPanic(t.Elem())
 
 	case TSTRUCT:
-		for _, t1 := range t.Fields().Slice() {
-			if hashMightPanic(t1.Type) {
-				return true
-			}
-		}
-		return false
-
-	case TUNION:
 		for _, t1 := range t.Fields().Slice() {
 			if hashMightPanic(t1.Type) {
 				return true
@@ -1447,7 +1442,7 @@ func dtypesym(t *types.Type) *obj.LSym {
 			dtypesym(t1.Type)
 		}
 
-		// All non-exported union field names within an union
+		// All non-exported union field names within a union
 		// type must originate from a single package. By
 		// identifying and recording that package within the
 		// union type descriptor, we can omit that
@@ -2014,11 +2009,6 @@ func (p *GCProg) emit(t *types.Type, offset int64) {
 		p.w.Repeat(elem.Width/int64(Widthptr), count-1)
 
 	case TSTRUCT:
-		for _, t1 := range t.Fields().Slice() {
-			p.emit(t1.Type, offset+t1.Offset)
-		}
-
-	case TUNION:
 		for _, t1 := range t.Fields().Slice() {
 			p.emit(t1.Type, offset+t1.Offset)
 		}

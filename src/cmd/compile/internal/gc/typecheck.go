@@ -517,7 +517,7 @@ func typecheck1(n *Node, top int) (res *Node) {
 	case OTUNION:
 		ok |= Etype
 		n.Op = OTYPE
-		// FIXME: Not sure if I need a tounion considering tostruct is supposed to deal with struct, interface and arg list
+		// FRANKBRO: Not sure if I need a tounion considering tostruct is supposed to deal with struct, interface and arg list
 		n.Type = tostruct(n.List.Slice())
 		if n.Type == nil || n.Type.Broke() {
 			n.Type = nil

@@ -591,6 +591,7 @@ func onebitwalktype1(t *types.Type, off int64, bv bvec) {
 		}
 
 	case TUNION:
+		// FRANKBRO: No clue what this does
 		for _, f := range t.Fields().Slice() {
 			onebitwalktype1(f.Type, off+f.Offset, bv)
 		}

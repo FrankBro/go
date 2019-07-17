@@ -574,6 +574,49 @@ func structfield(n *Node) *types.Field {
 	return f
 }
 
+func unionfield(n *Node) *types.Field {
+	lno := lineno
+	lineno = n.Pos
+
+	if n.Op != ODCLFIELD {
+		Fatalf("structfield: oops %v\n", n)
+	}
+
+	f := types.NewField()
+	f.Pos = n.Pos
+	f.Sym = n.Sym
+
+	if n.Left != nil {
+		n.Left = typecheck(n.Left, Etype)
+		n.Type = n.Left.Type
+		n.Left = nil
+	}
+
+	f.Type = n.Type
+	if f.Type == nil {
+		f.SetBroke(true)
+	}
+
+	if n.Embedded() {
+		checkembeddedtype(n.Type)
+		f.Embedded = 1
+	} else {
+		f.Embedded = 0
+	}
+
+	switch u := n.Val().U.(type) {
+	case string:
+		f.Note = u
+	default:
+		yyerror("field tag must be a string")
+	case nil:
+		// no-op
+	}
+
+	lineno = lno
+	return f
+}
+
 // checkdupfields emits errors for duplicately named fields or methods in
 // a list of struct or interface types.
 func checkdupfields(what string, ts ...*types.Type) {
@@ -592,8 +635,36 @@ func checkdupfields(what string, ts ...*types.Type) {
 	}
 }
 
+func tounion(l []*Node) *types.Type {
+	t := types.New(TUNION)
+	tounion0(t, l)
+	return t
+}
+
+func tounion0(t *types.Type, l []*Node) {
+	if t == nil || !t.IsUnion() {
+		Fatalf("union expected")
+	}
+
+	fields := make([]*types.Field, len(l))
+	for i, n := range l {
+		f := unionfield(n)
+		if f.Broke() {
+			t.SetBroke(true)
+		}
+		fields[i] = f
+	}
+	t.SetFields(fields)
+
+	checkdupfields("field", t)
+
+	if !t.Broke() {
+		checkwidth(t)
+	}
+}
+
 // convert a parsed id/type list into
-// a type for struct/union/interface/arglist
+// a type for struct/interface/arglist
 func tostruct(l []*Node) *types.Type {
 	t := types.New(TSTRUCT)
 	tostruct0(t, l)

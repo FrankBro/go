@@ -201,7 +201,9 @@ func widunion(errtype *types.Type, t *types.Type, o int64, flag int) int64 {
 		if w == 0 {
 			lastzero = o
 		}
-		o += w
+		if w > o {
+			o = w
+		}
 		maxwidth := thearch.MAXWIDTH
 		// On 32-bit systems, reflect tables impose an additional constraint
 		// that each field start offset must fit in 31 bits.
@@ -214,7 +216,7 @@ func widunion(errtype *types.Type, t *types.Type, o int64, flag int) int64 {
 		}
 	}
 
-	// For nonzero-sized structs which end in a zero-sized thing, we add
+	// For nonzero-sized unions which end in a zero-sized thing, we add
 	// an extra byte of padding to the type. This padding ensures that
 	// taking the address of the zero-sized thing can't manufacture a
 	// pointer to the next object in the heap. See issue 9401.

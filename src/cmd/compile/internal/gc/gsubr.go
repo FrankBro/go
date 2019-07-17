@@ -309,6 +309,7 @@ func ggloblsym(s *obj.LSym, width int32, flags int16) {
 func isfat(t *types.Type) bool {
 	if t != nil {
 		switch t.Etype {
+		// FRANKBRO: Not sure unions are considered fat, it's just one field in memory
 		case TSTRUCT, TUNION, TARRAY, TSLICE, TSTRING,
 			TINTER: // maybe remove later
 			return true

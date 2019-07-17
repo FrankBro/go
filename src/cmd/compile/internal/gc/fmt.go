@@ -846,54 +846,19 @@ func typefmt(t *types.Type, flag FmtFlag, mode fmtMode, depth int) string {
 		return string(buf)
 
 	case TUNION:
-		if m := t.UnionType().Map; m != nil {
-			mt := m.MapType()
-			// Format the bucket struct for map[x]y as map.bucket[x]y.
-			// This avoids a recursive print that generates very long names.
-			var subtype string
-			switch t {
-			case mt.Bucket:
-				subtype = "bucket"
-			case mt.Hmap:
-				subtype = "hdr"
-			case mt.Hiter:
-				subtype = "iter"
-			default:
-				Fatalf("unknown internal map type")
-			}
-			return fmt.Sprintf("map.%s[%s]%s", subtype, tmodeString(m.Key(), mode, depth), tmodeString(m.Elem(), mode, depth))
-		}
-
 		buf := make([]byte, 0, 64)
-		if funarg := t.UnionType().Funarg; funarg != types.FunargNone {
-			buf = append(buf, '(')
-			var flag1 FmtFlag
-			switch mode {
-			case FTypeId, FTypeIdName, FErr:
-				// no argument names on function signature, and no "noescape"/"nosplit" tags
-				flag1 = FmtShort
+		buf = append(buf, "union {"...)
+		for i, f := range t.Fields().Slice() {
+			if i != 0 {
+				buf = append(buf, ';')
 			}
-			for i, f := range t.Fields().Slice() {
-				if i != 0 {
-					buf = append(buf, ", "...)
-				}
-				buf = append(buf, fldconv(f, flag1, mode, depth, funarg)...)
-			}
-			buf = append(buf, ')')
-		} else {
-			buf = append(buf, "union {"...)
-			for i, f := range t.Fields().Slice() {
-				if i != 0 {
-					buf = append(buf, ';')
-				}
-				buf = append(buf, ' ')
-				buf = append(buf, fldconv(f, FmtLong, mode, depth, funarg)...)
-			}
-			if t.NumFields() != 0 {
-				buf = append(buf, ' ')
-			}
-			buf = append(buf, '}')
+			buf = append(buf, ' ')
+			buf = append(buf, fldconv(f, FmtLong, mode, depth, funarg)...)
 		}
+		if t.NumFields() != 0 {
+			buf = append(buf, ' ')
+		}
+		buf = append(buf, '}')
 		return string(buf)
 
 	case TFORW:
